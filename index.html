@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NWS Weather App</title>
+    <script
+      crossorigin
+      src="https://unpkg.com/react@18/umd/react.development.js"
+    ></script>
+    <script
+      crossorigin
+      src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"
+    ></script>
+    <script
+      crossorigin
+      src="https://unpkg.com/babel-standalone@6/babel.min.js"
+    ></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.5.0/Recharts.min.js"></script>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 20px;
+        background: linear-gradient(to bottom, #7865ac, #c3a6cf);
+        color: white;
+        min-height: 100vh;
+      }
+      input,
+      button {
+        margin: 5px;
+        padding: 6px;
+      }
+      pre {
+        background: #eee;
+        padding: 10px;
+        overflow-x: auto;
+      }
+      .headColorScheme {
+        background: linear-gradient(to bottom, #1a2342, #8c479b);
+        color: white;
+        border-radius: 10px;
+        box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.25);
+        border: 0px !important;
+      }
+      .colorScheme {
+        background: linear-gradient(to bottom, #1a2342, #8c479b);
+        color: white;
+        border-radius: 10px;
+        box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.25);
+        border: 0px !important;
+      }
+      .card-body img {
+        border-radius: 50px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" class="container my-5"></div>
+
+    <script type="text/babel">
+      function formatLocation(str) {
+        if (!str) return "";
+
+        // If it's all digits (likely a ZIP code), return as-is
+        if (/^\d{5}(-\d{4})?$/.test(str.trim())) {
+          return str.trim();
+        }
+
+        // Otherwise, assume city,state and format accordingly
+        const parts = str.split(",");
+        const city = parts[0]
+          .trim()
+          .toLowerCase()
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+        const state = (parts[1] || "").trim().toUpperCase();
+        return `${city}${state ? `, ${state}` : ""}`;
+      }
+
+      const TemperatureChart = ({ forecast }) => {
+        if (!forecast || !forecast.properties || !forecast.properties.periods) {
+          return null;
+        }
+
+        // Check if Recharts is available
+        if (typeof Recharts === "undefined") {
+          return <div>Loading chart...</div>;
+        }
+
+        const {
+          LineChart,
+          Line,
+          XAxis,
+          YAxis,
+          CartesianGrid,
+          Tooltip,
+          Legend,
+          ResponsiveContainer,
+        } = Recharts;
+
+        // Process the forecast data to create chart data
+        const chartData = [];
+        const periods = forecast.properties.periods;
+
+        // Group periods by day and extract temperatures
+        const dayMap = new Map();
+
+        periods.forEach((period) => {
+          const baseName = period.name.replace(" Night", "");
+          if (!dayMap.has(baseName)) {
+            dayMap.set(baseName, { day: baseName, high: null, low: null });
+          }
+
+          const dayData = dayMap.get(baseName);
+
+          // Determine if this is a high or low temperature
+          if (period.isDaytime || !period.name.includes("Night")) {
+            dayData.high = period.temperature;
+          } else {
+            dayData.low = period.temperature;
+          }
+        });
+
+        // Convert map to array and filter out incomplete days
+        dayMap.forEach((dayData) => {
+          if (dayData.high !== null || dayData.low !== null) {
+            chartData.push(dayData);
+          }
+        });
+
+        const formatTooltip = (value, name) => {
+          return [
+            `${value}°F`,
+            name === "high" ? "High Temperature" : "Low Temperature",
+          ];
+        };
+
+        return (
+          <div className="my-4 p-3 colorScheme">
+            <h4>Temperature Forecast</h4>
+            <ResponsiveContainer width="100%" height={400}>
+              <LineChart
+                data={chartData}
+                margin={{
+                  top: 20,
+                  right: 30,
+                  left: 20,
+                  bottom: 5,
+                }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff30" />
+                <XAxis dataKey="day" stroke="#ffffff" fontSize={12} />
+                <YAxis
+                  stroke="#ffffff"
+                  fontSize={12}
+                  label={{
+                    value: "Temperature (°F)",
+                    angle: -90,
+                    position: "insideLeft",
+                    style: { textAnchor: "middle", fill: "#ffffff" },
+                  }}
+                />
+                <Tooltip
+                  formatter={formatTooltip}
+                  labelStyle={{ color: "#333" }}
+                  contentStyle={{
+                    backgroundColor: "#fff",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
+                    color: "#333",
+                  }}
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="high"
+                  stroke="#ff6b6b"
+                  strokeWidth={3}
+                  dot={{ fill: "#ff6b6b", strokeWidth: 2, r: 4 }}
+                  name="High Temperature"
+                  connectNulls={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="low"
+                  stroke="#4ecdc4"
+                  strokeWidth={3}
+                  dot={{ fill: "#4ecdc4", strokeWidth: 2, r: 4 }}
+                  name="Low Temperature"
+                  connectNulls={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        );
+      };
+
+      const App = () => {
+        const [location, setLocation] = React.useState("");
+        const [forecast, setForecast] = React.useState(null);
+        const [coords, setCoords] = React.useState(null);
+        const [error, setError] = React.useState("");
+        const windDirection = [
+          ["NNW", 335],
+          ["NW", 315],
+          ["WNW", 295],
+          ["W", 270],
+          ["WSW", 245],
+          ["SW", 225],
+          ["SSW", 205],
+          ["S", 180],
+          ["SSE", 155],
+          ["SE", 135],
+          ["ESE", 115],
+          ["E", 90],
+          ["ENE", 65],
+          ["NE", 45],
+          ["NNE", 25],
+          ["N", 360],
+        ];
+
+        const getDirectionAngle = (dir) => {
+          const match = windDirection.find(([label]) => label === dir);
+          return match ? match[1] : "Unknown";
+        };
+
+        const getWeather = async () => {
+          setForecast(null);
+          setError("");
+          setCoords(null);
+
+          try {
+            // 1. Geocode the city/state or ZIP using Nominatim
+            const geoRes = await fetch(
+              `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+                location
+              )}`
+            );
+            const geoData = await geoRes.json();
+
+            if (!geoData.length) {
+              setError("Location not found.");
+              return;
+            }
+
+            const lat = geoData[0].lat;
+            const lon = geoData[0].lon;
+            setCoords({ lat, lon }); // Store coordinates
+
+            // 2. Get the forecast URL from NWS API
+            const pointRes = await fetch(
+              `https://api.weather.gov/points/${lat},${lon}`
+            );
+            const pointData = await pointRes.json();
+            const forecastUrl = pointData.properties.forecast;
+
+            // 3. Get the actual forecast
+            const weatherRes = await fetch(forecastUrl);
+            const weatherData = await weatherRes.json();
+
+            // Log all temperatures in periods
+            weatherData.properties.periods.forEach((period) => {
+              console.log(
+                `Period: ${period.name}, Temp: ${period.temperature}${period.temperatureUnit}`
+              );
+            });
+
+            setForecast(weatherData);
+          } catch (err) {
+            setError("Something went wrong.");
+            console.error(err);
+          }
+        };
+
+        const groupForecastByDay = (periods) => {
+          const map = new Map();
+          periods.forEach((period) => {
+            const baseName = period.name.replace(" Night", "");
+            if (!map.has(baseName)) {
+              map.set(baseName, []);
+            }
+            map.get(baseName).push(period);
+          });
+          return map;
+        };
+
+        return (
+          <div className="row">
+            <div className="col col-12">
+              <h2>National Weather Service Forecast</h2>
+              <input
+                type="text"
+                value={location}
+                placeholder="Enter city, state or ZIP"
+                onChange={(e) => setLocation(e.target.value)}
+              />
+              <button onClick={getWeather}>Submit</button>
+
+              {error && <p style={{ color: "red" }}>{error}</p>}
+
+              {forecast &&
+                forecast.properties &&
+                forecast.properties.periods &&
+                forecast.properties.periods.length > 0 && (
+                  <div className="my-4 p-3 headColorScheme">
+                    <h3>The current weather in {formatLocation(location)}</h3>
+                    <h4>{forecast.properties.periods[0].name}</h4>
+                    <div className="row">
+                      <div className="col-1">
+                        <h2>
+                          <strong>
+                            {forecast.properties.periods[0].temperature}°
+                            {forecast.properties.periods[0].temperatureUnit}
+                          </strong>
+                        </h2>
+                      </div>
+                      <div className="col-1">
+                        <img
+                          src={forecast.properties.periods[0].icon}
+                          alt={forecast.properties.periods[0].shortForecast}
+                        />
+                      </div>
+                      <div className="col-6">
+                        {forecast.properties.periods[0].detailedForecast}
+                      </div>
+                      <div className="col-2">
+                        <h2>
+                          {
+                            forecast.properties.periods[0]
+                              .probabilityOfPrecipitation.value
+                          }
+                          %
+                        </h2>
+                        chance of rain
+                      </div>
+                      <div className="col-2">
+                        <svg
+                          width="50"
+                          height="50"
+                          style={{
+                            transform: `rotate(${getDirectionAngle(
+                              forecast.properties.periods[0].windDirection
+                            )}deg)`,
+                          }}
+                          viewBox="0 0 200 200"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="white"
+                        >
+                          <path
+                            className="st0"
+                            d="M95,22.02c40.24,0,72.98,32.74,72.98,72.98s-32.74,72.98-72.98,72.98S22.02,135.24,22.02,95,54.76,22.02,95,22.02M95,4.02C44.75,4.02,4.02,44.75,4.02,95s40.73,90.98,90.98,90.98,90.98-40.73,90.98-90.98S145.25,4.02,95,4.02h0Z"
+                          />
+                          <path
+                            className="st0"
+                            d="M121.69,138.1l-22.14-89.01c-1.17-4.69-7.84-4.69-9.01,0l-22.14,89.01c-.91,3.65,2.68,6.81,6.18,5.45l20.46-7.95,20.46,7.95c3.51,1.36,7.09-1.8,6.18-5.45ZM95,103.91c-4.92,0-8.91-3.99-8.91-8.91s3.99-8.91,8.91-8.91,8.91,3.99,8.91,8.91-3.99,8.91-8.91,8.91Z"
+                          />
+                        </svg>
+                        <br />
+                        {forecast.properties.periods[0].windDirection} winds at{" "}
+                        {forecast.properties.periods[0].windSpeed}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+              {coords && (
+                <div style={{ margin: "1em 0" }}>
+                  <iframe
+                    width="100%"
+                    height="450"
+                    frameBorder="0"
+                    scrolling="no"
+                    marginHeight="0"
+                    marginWidth="0"
+                    src={`https://www.openstreetmap.org/export/embed.html?map=13&bbox=${coords.lon},${coords.lat},${coords.lon},${coords.lat}&layer=mapnik&marker=${coords.lat},${coords.lon}`}
+                  ></iframe>
+                </div>
+              )}
+            </div>
+
+            <div className="row">
+              {forecast && (
+                <div className="col-12">
+                  <h3>This week's forecast for {location}</h3>
+                  <div className="row">
+                    {[
+                      ...groupForecastByDay(
+                        forecast.properties.periods.slice(1)
+                      ),
+                    ].map(([day, periods], index) => (
+                      <div
+                        key={index}
+                        className="col-12 col-sm-6 col-md-4 col-lg-2 mb-4"
+                      >
+                        <div className="card h-100 colorScheme">
+                          <div className="card-body">
+                            <h5 className="card-title text-center">{day}</h5>
+                            {periods.map((period, i) => (
+                              <div
+                                key={i}
+                                className="mb-3 text-center border-top pt-2"
+                              >
+                                <div>
+                                  <strong>
+                                    {period.name.includes("Night")
+                                      ? "Night"
+                                      : "Day"}
+                                  </strong>
+                                </div>
+                                <img
+                                  src={period.icon}
+                                  alt={period.shortForecast}
+                                  className="img-fluid mb-1"
+                                />
+                                <div>
+                                  <strong>
+                                    {period.temperature}°
+                                    {period.temperatureUnit}
+                                  </strong>
+                                </div>
+                                <div>{period.shortForecast}</div>
+                                <div>&nbsp;</div>
+                                <div className="row">
+                                  <div className="col-6">
+                                    <svg
+                                      width="50"
+                                      height="50"
+                                      style={{
+                                        transform: `rotate(${getDirectionAngle(
+                                          period.windDirection
+                                        )}deg)`,
+                                      }}
+                                      viewBox="0 0 200 200"
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      fill="white"
+                                    >
+                                      <path
+                                        className="st0"
+                                        d="M95,22.02c40.24,0,72.98,32.74,72.98,72.98s-32.74,72.98-72.98,72.98S22.02,135.24,22.02,95,54.76,22.02,95,22.02M95,4.02C44.75,4.02,4.02,44.75,4.02,95s40.73,90.98,90.98,90.98,90.98-40.73,90.98-90.98S145.25,4.02,95,4.02h0Z"
+                                      />
+                                      <path
+                                        className="st0"
+                                        d="M121.69,138.1l-22.14-89.01c-1.17-4.69-7.84-4.69-9.01,0l-22.14,89.01c-.91,3.65,2.68,6.81,6.18,5.45l20.46-7.95,20.46,7.95c3.51,1.36,7.09-1.8,6.18-5.45ZM95,103.91c-4.92,0-8.91-3.99-8.91-8.91s3.99-8.91,8.91-8.91,8.91,3.99,8.91,8.91-3.99,8.91-8.91,8.91Z"
+                                      />
+                                    </svg>
+                                    <br />
+                                    {period.windDirection}
+                                    <br />
+                                    {period.windSpeed}
+                                  </div>
+                                  <div className="col-6">
+                                    {period.probabilityOfPrecipitation.value}%
+                                    chance of rain
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="row">
+                    <div className="col-6">
+                      <iframe
+                        width="100%"
+                        height="450"
+                        frameBorder="0"
+                        scrolling="no"
+                        marginHeight="0"
+                        marginWidth="0"
+                        src={`https://theskylive.com/planetarium?objects=sun-moon-mercury-venus-mars-jupiter-saturn-uranus-neptune-pluto&localdata=${coords.lat}%7C${coords.lon}`}
+                      ></iframe>
+                    </div>
+                  </div>
+
+                  <TemperatureChart forecast={forecast} />
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      };
+
+      ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+  </body>
+</html>
