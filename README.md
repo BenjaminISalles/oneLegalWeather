@@ -2,7 +2,7 @@
 
 This is a front-end-only React weather app built as a homework assignment for OneLegal. It fetches weather data from the National Weather Service API based on user-inputted city/state info.
 
-🌐 **Live Demo:** [http://bensmash.net/oneLegal/](http://bensmash.net/oneLegal/)
+**Live Demo:** [http://bensmash.net/oneLegal/](http://bensmash.net/oneLegal/)
 
 ---
 
